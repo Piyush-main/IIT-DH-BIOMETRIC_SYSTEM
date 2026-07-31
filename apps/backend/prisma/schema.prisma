@@ -1,0 +1,176 @@
+// =====================================================================
+// IIT Dharwad ESP32 Biometric Attendance Portal — Prisma Schema
+// =====================================================================
+// Decisions locked in for this iteration (revisit if requirements change):
+//   - Hard deletes: no soft-delete columns. FKs default to RESTRICT,
+//     so deleting a student/professor with attendance or enrollment
+//     history will fail at the DB level by design — the app layer
+//     should surface that as a 409, not attempt to force it through.
+//   - Fingerprint templates stay embedded as `template Bytes?` on
+//     Student/Professor (not a separate FingerprintTemplate table).
+// =====================================================================
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" covers local dev on your machine; rhel-openssl-3.0.x covers
+  // Vercel's serverless (Amazon Linux) runtime. Without the second target,
+  // `prisma generate` run locally won't produce a binary that works once
+  // deployed, and the function fails at runtime with a missing-engine error.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------
+// Reference data
+// ---------------------------------------------------------------------
+
+model Department {
+  deptCode String @id @map("dept_code")
+  deptName String @map("dept_name")
+
+  students Student[]
+  profs    Professor[]
+  courses  Course[]
+
+  @@map("departments")
+}
+
+model Program {
+  programCode String @id @map("program_code")
+  programName String @map("program_name")
+
+  students Student[]
+
+  @@map("programs")
+}
+
+// ---------------------------------------------------------------------
+// People
+// ---------------------------------------------------------------------
+
+model Student {
+  studentId     String   @id @map("student_id")
+  name          String
+  dept          String
+  program       String
+  admissionYear Int      @map("admission_year")
+  email         String?  @unique
+  template      Bytes?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  department  Department          @relation(fields: [dept], references: [deptCode])
+  programRef  Program             @relation(fields: [program], references: [programCode])
+  enrollments CourseEnrollment[]
+  attendance  Attendance[]
+
+  @@index([dept])
+  @@index([program])
+  @@map("students")
+}
+
+model Professor {
+  profId    String   @id @map("prof_id")
+  name      String
+  dept      String
+  email     String?  @unique
+  template  Bytes?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  department        Department   @relation(fields: [dept], references: [deptCode])
+  courses           Course[]
+  authorizedRecords Attendance[] @relation("AuthorizedBy")
+
+  @@index([dept])
+  @@map("profs")
+}
+
+// ---------------------------------------------------------------------
+// Academics
+// ---------------------------------------------------------------------
+
+model Course {
+  courseCode String   @id @map("course_code")
+  courseName String   @map("course_name")
+  profId     String   @map("prof_id")
+  dept       String
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  professor   Professor          @relation(fields: [profId], references: [profId])
+  department  Department         @relation(fields: [dept], references: [deptCode])
+  enrollments CourseEnrollment[]
+  attendance  Attendance[]
+
+  @@index([profId])
+  @@index([dept])
+  @@map("courses")
+}
+
+model CourseEnrollment {
+  enrollmentId BigInt   @id @default(autoincrement()) @map("enrollment_id")
+  studentId    String   @map("student_id")
+  courseCode   String   @map("course_code")
+  status       String   @default("active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  student Student @relation(fields: [studentId], references: [studentId])
+  course  Course  @relation(fields: [courseCode], references: [courseCode])
+
+  @@unique([studentId, courseCode], name: "uq_student_course")
+  @@index([courseCode])
+  @@map("course_enrollments")
+}
+
+// ---------------------------------------------------------------------
+// Attendance
+// ---------------------------------------------------------------------
+
+model Attendance {
+  attendanceId Int      @id @default(autoincrement()) @map("attendance_id")
+  courseCode   String   @map("course_code")
+  studentId    String   @map("student_id")
+  authorizedBy String   @map("authorized_by")
+  recordedAt   DateTime @default(now()) @map("recorded_at")
+  sessionDate  DateTime @map("session_date") @db.Date
+  synced       Boolean  @default(false)
+
+  course     Course    @relation(fields: [courseCode], references: [courseCode])
+  student    Student   @relation(fields: [studentId], references: [studentId])
+  authorizer Professor @relation("AuthorizedBy", fields: [authorizedBy], references: [profId])
+
+  // This constraint is the real enforcement point for "one attendance
+  // record per student per course per day" — the ESP32/Pi devices write
+  // directly to Supabase with their own key, bypassing the app-level
+  // duplicate check in attendance.service.ts entirely. Without this at
+  // the DB level, a double fingerprint scan becomes a silent duplicate row.
+  @@unique([courseCode, studentId, sessionDate], name: "uq_attendance_once_per_session")
+  @@index([studentId, sessionDate])
+  @@index([courseCode, sessionDate])
+  @@map("attendance")
+}
+
+// ---------------------------------------------------------------------
+// Audit log (Admin CRUD trail)
+// ---------------------------------------------------------------------
+
+model AuditLog {
+  auditId    BigInt   @id @default(autoincrement()) @map("audit_id")
+  actorEmail String   @map("actor_email")
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([actorEmail])
+  @@map("audit_logs")
+}
