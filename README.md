@@ -1,6 +1,6 @@
 # IIT Dharwad ESP32 Biometric Attendance Portal
 
-Web management portal for an ESP32 + Raspberry Pi based fingerprint attendance
+Web management portal for an ESP32 based fingerprint attendance
 system deployed at IIT Dharwad. This repo is the **web platform** only —
 students, professors, courses, enrollments, and attendance records. Fingerprint
 capture and offline sync are handled by Raspberry Pi services that talk to
