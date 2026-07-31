@@ -1,11 +1,13 @@
 import express from 'express';
 import cors from 'cors';
-import helmet from 'helmet';
+import helmetImport from 'helmet';
 import morgan from 'morgan';
 import { env } from './config/env.js';
 import { API_PREFIX } from '@attendance/constants';
 import apiRouter from './routes/index.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+
+const helmet = helmetImport as unknown as () => express.RequestHandler;
 
 export function createApp() {
   const app = express();
