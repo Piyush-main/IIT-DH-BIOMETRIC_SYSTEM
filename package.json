@@ -10,14 +10,20 @@
   "scripts": {
     "dev:frontend": "npm run dev --workspace=apps/frontend",
     "dev:backend": "npm run dev --workspace=apps/backend",
+
+    "build:shared": "npm run build --workspace=packages/shared-types --workspace=packages/validation --workspace=packages/constants",
+
     "build:frontend": "npm run build --workspace=apps/frontend",
     "build:backend": "npm run build --workspace=apps/backend",
+
     "prisma:generate": "npm run prisma:generate --workspace=apps/backend",
     "prisma:migrate": "npm run prisma:migrate --workspace=apps/backend",
     "prisma:seed": "npm run prisma:seed --workspace=apps/backend",
+
     "lint": "eslint . --ext .ts,.tsx",
     "format": "prettier --write ."
   },
+  "postinstall": "npm run build:shared",
   "devDependencies": {
     "eslint": "^9.9.0",
     "prettier": "^3.3.3",
