@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "npx prisma generate && npm run build",
+  "buildCommand": "cd ../.. && npm run build:shared && cd apps/backend && npx prisma generate && npm run build",
   "rewrites": [
     {
       "source": "/(.*)",
